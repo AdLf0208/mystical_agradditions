@@ -1,0 +1,18 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "group": "mysticalagradditions:cruxes",
+  "pattern": [
+    "ECE",
+    "CDC",
+    "ECE"
+  ],
+  "key": {
+    "E": "mysticalagradditions:insanium_essence",
+    "C": "mysticalagradditions:dragon_scale",
+    "D": "#c:storage_blocks/diamond"
+  },
+  "result": {
+    "id": "mysticalagradditions:dragon_egg_crux",
+    "count": 1
+  }
+}

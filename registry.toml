@@ -1,0 +1,42 @@
+id = "mysticalagradditions"
+kind = "native-mod"
+name = "mysticalagradditions"
+summary = "A Horizon port of mysticalagradditions."
+description = """
+A port of [mysticalagradditions](BlakeBr0/MysticalAgradditions) for Horizon.
+
+**Implemented so far**
+
+- Crops** `mysticalagradditions:<name>_crop` (`nether_star`, `dragon_egg`,
+- `gaia_spirit`, `awakened_draconium`, `neutronium`, `nitro_crystal`) on the
+- `minecraft:wheat` template: `age` 0..7, the jar's 4-pixel outline with an
+- empty collision, vanilla crop random tick.
+- Seeds/essences** `mysticalagradditions:<name>_seeds` (a plain item with
+- `place_block`, as the parent port does) and `<name>_essence` items.
+- Cruxes** `mysticalagradditions:<name>_crux` on the `minecraft:stone`
+- template, hardness 5.0 / blast 10.0, `requires_tool`, the jar's
+
+**Not yet ported**
+
+- nothing recorded yet
+
+Original copyright and licence notices are kept in this repository. Pinned to
+Horizon 1d63e0a and horizon-mixins 5a64af93. Help with the remaining slices is
+welcome.
+"""
+authors = ["AdLf0208"]
+owners = ["AdLf0208"]
+owner_ids = [107615167]
+license = "MIT"
+source = "https://github.com/AdLf0208/mysticalagradditions"
+icon = "icons/mysticalagradditions.png"
+categories = ["utility"]
+tags = ["port", "horizon"]
+
+[[versions]]
+version = "0.1.0"
+published = "2026-11-11"
+game = "26.3"
+file = "mysticalagradditions.hnmod"
+sha256 = "f08aad3688521ea62ee35c575a42423ec605884eac138849decf66fbdf8888b0"
+changelog = "First release: six tier-6 crops, their cruxes, insanium farmland and the awakened-draconium line, embedded in one .hnmod"

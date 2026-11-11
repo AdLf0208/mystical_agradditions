@@ -1,0 +1,14 @@
+# Port-owned content mod for the Mystical Agradditions 1.21.1-8.0.15 slice: the
+# six tier-6 crops (crop, seeds, essence), their six cruxes, insanium essence
+# and insanium farmland. Textures/models are the upstream mod's own MIT assets
+# from the exact ATM10 jar (see ../SOURCE.md); the shared crop-stage models are
+# the parent Mystical Agriculture's (also MIT). Local-only until publishing is
+# approved (see ../LICENSE and ../notes.md).
+id = "mysticalagradditions"
+name = "Mystical Agradditions"
+version = "0.1.0"
+description = "Slice 1: the six tier-6 crops, their cruxes and insanium farmland"
+authors = ["BlakeBr0"]
+api = "0.2"
+side = "both"
+capabilities = ["registries"]

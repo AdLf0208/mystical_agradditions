@@ -1,0 +1,47 @@
+{
+  "type": "minecraft:block",
+  "random_sequence": "mysticalagradditions:blocks/gaia_spirit_crop",
+  "pools": [
+    {
+      "rolls": 1,
+      "entries": [
+        {
+          "type": "minecraft:alternatives",
+          "children": [
+            {
+              "type": "minecraft:item",
+              "condition": {
+                "type": "minecraft:match_block",
+                "blocks": "mysticalagradditions:gaia_spirit_crop",
+                "state": {
+                  "age": "7"
+                }
+              },
+              "name": "mysticalagradditions:gaia_spirit_essence"
+            },
+            {
+              "type": "minecraft:item",
+              "name": "mysticalagradditions:gaia_spirit_seeds"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "rolls": 1,
+      "condition": {
+        "type": "minecraft:match_block",
+        "blocks": "mysticalagradditions:gaia_spirit_crop",
+        "state": {
+          "age": "7"
+        }
+      },
+      "entries": [
+        {
+          "type": "minecraft:item",
+          "name": "mysticalagradditions:gaia_spirit_seeds"
+        }
+      ]
+    }
+  ]
+}

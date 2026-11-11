@@ -1,0 +1,42 @@
+{
+  "type": "minecraft:block",
+  "random_sequence": "mysticalagradditions:blocks/insanium_farmland",
+  "pools": [
+    {
+      "rolls": 1,
+      "entries": [
+        {
+          "type": "minecraft:alternatives",
+          "children": [
+            {
+              "type": "minecraft:item",
+              "condition": "minecraft:tool/can_silk_touch",
+              "name": "mysticalagradditions:insanium_farmland"
+            },
+            {
+              "type": "minecraft:item",
+              "name": "minecraft:dirt"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "rolls": 1,
+      "condition": {
+        "type": "minecraft:inverted",
+        "term": "minecraft:tool/can_silk_touch"
+      },
+      "entries": [
+        {
+          "type": "minecraft:item",
+          "condition": {
+            "type": "minecraft:random_chance",
+            "chance": 0.25
+          },
+          "name": "mysticalagradditions:insanium_essence"
+        }
+      ]
+    }
+  ]
+}

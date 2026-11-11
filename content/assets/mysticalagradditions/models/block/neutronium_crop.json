@@ -1,0 +1,6 @@
+{
+  "parent": "mysticalagradditions:block/mystical_resource_crop_7",
+  "textures": {
+    "flower": "mysticalagradditions:block/flower/neutronium_flower"
+  }
+}
