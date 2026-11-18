@@ -1,0 +1,18 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "group": "mysticalagradditions:seeds",
+  "pattern": [
+    "MEM",
+    "ESE",
+    "MEM"
+  ],
+  "key": {
+    "M": "minecraft:nether_star",
+    "E": "mysticalagradditions:nether_star_essence",
+    "S": "minecraft:wheat_seeds"
+  },
+  "result": {
+    "id": "mysticalagradditions:nether_star_seeds",
+    "count": 1
+  }
+}

@@ -1,0 +1,7 @@
+{
+  "parent": "block/cross",
+  "render_type": "minecraft:cutout_mipped",
+  "textures": {
+    "cross": "mysticalagradditions:block/mystical_resource_crop_4"
+  }
+}
