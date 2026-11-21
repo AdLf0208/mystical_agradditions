@@ -1,26 +1,29 @@
-# Mystical Agradditions for Horizon — slice 1: the six tier-6 crops
+# Mystical Agradditions for Horizon — the six tier-6 crops and the two mob drops
 # One flat package (the SDK format): this manifest is the mod's only identity, `src/` is
 # compiled by the launcher against the game build [native] pins, and `assets/` + `data/` are
 # the carried content (the six crops, their seeds and essences, the six cruxes, insanium
 # essence and insanium farmland, with their models, textures, loot and recipes).
 id = "mysticalagradditions"
 name = "Mystical Agradditions"
-# 0.2.0 is the SDK-format version. It supersedes the retired `.hnmod` 0.1.0 (PR #906, closed by
-# the 2026-11-18 format purge because Horizon retired `.hnmod`); the registry entry, the file
-# name and the release must agree.
-version = "0.2.0"
+# 0.2.1 adds the Wither/Ender-Dragon drop handlers to the 0.2.0 SDK-format package, which
+# superseded the retired `.hnmod` 0.1.0 (PR #906, closed by the 2026-11-18 format purge
+# because Horizon retired `.hnmod`); the registry entry, the file name and the release must
+# agree.
+version = "0.2.1"
 description = """A port of Mystical Agradditions for Horizon: the six tier-6 crops of the parent
 Mystical Agriculture — nether star, dragon egg, gaia spirit, awakened draconium, neutronium and
 nitro crystal — with their seeds, essences and crux blocks, plus insanium essence and insanium
 farmland. Each crop grows through the wheat template's ages 0..7 on random ticks only while its
 own crux stands two blocks below it, bone meal is refused on every one of them, and a harvest
-drops the jar's own counts: one seed below age 7, and at age 7 one essence plus one seeds. The
-five recipes whose ingredients exist here are carried (two seed recipes, two crux recipes, and
-insanium farmland). The parent Mystical Agriculture mod is required for the essence-tier and
-seed-material items the recipes of the other four families name. This slice does not include the
-essence-coal chain, the apples, the paxels, the nether and end ores with their worldgen, the six
-molten fluids, the Tinkers' data, the Wither and Ender Dragon drop handlers, the config, the
-creative tab, the client tint and the farmland fall behaviour; all of them are recorded gaps."""
+drops the jar's own counts: one seed below age 7, and at age 7 one essence plus one seeds. A
+dying Wither leaves a withering soul on the jar's 35% chance, and a dying Ender Dragon leaves
+its eight dragon scales, which is what makes the dragon-scale and withering-soul recipes
+obtainable. The five recipes whose ingredients exist here are carried (two seed recipes, two
+crux recipes, and insanium farmland). The parent Mystical Agriculture mod is required for the
+essence-tier and seed-material items the recipes of the other four families name. This slice
+does not include the essence-coal chain, the apples, the paxels, the nether and end ores with
+their worldgen, the six molten fluids, the Tinkers' data, the config, the creative tab, the
+client tint and the farmland fall behaviour; all of them are recorded gaps."""
 authors = ["BlakeBr0", "AdLf0208"]
 # MIT, read from the jar's META-INF/neoforge.mods.toml and the upstream LICENSE; rank 0.
 # Local-only until the campaign maintainer approves publishing (ARCHITECTURE.md §8).
@@ -39,5 +42,7 @@ capabilities = ["registries"]
 
 [native]
 game = "26.3"
-horizon = "0b14f8acfd97fa2c750e42795249dcc981178ca4"
+horizon = "0a875da91dbb0fdcb7ba8c42c11341aa229af51a"
 mixins = "e59da9094f0c2fdda6c627fe9eff22dec6a906f0"
+# 0.2.1 (2026-11-21): adds the Wither drop handler (Hooks::living_drops) to the 0.2.0
+# SDK-format package, on the 2026-11-20 SDK nightly 0a875da.

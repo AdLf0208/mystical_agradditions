@@ -14,19 +14,20 @@ the file map, the hook table and the traps) before editing.
 ## Build it
 
 The SDK is the gate: `cargo horizon-mod build` fetches `.horizon/sdk/` (pinned to
-`0b14f8ac…`, gitignored) and builds the package; the **launcher** compiles the
-native code into a game, which is not installed here.
+`0a875da9…`, gitignored) and builds the package; the **launcher** compiles the
+native code into a game.
 
 ```sh
 cd ports/mysticalagradditions
-CARGO_INCREMENTAL=0 cargo test                        # runtime + the glue's own test
+CARGO_INCREMENTAL=0 cargo test                        # runtime + the glue's own tests
 CARGO_INCREMENTAL=0 cargo clippy --all-targets -- -D warnings
 cargo fmt --check                                     # never `--all`: it formats the SDK
 rm -f Cargo.lock                                      # the lock is packed and changes the artifact
 CARGO_INCREMENTAL=0 cargo horizon-mod build            # -> target/horizon-mod/mysticalagradditions.hmod
 cp target/horizon-mod/mysticalagradditions.hmod ./mysticalagradditions.hmod
 cargo horizon-mod check mysticalagradditions.hmod
-cargo horizon-mod fits mysticalagradditions.hmod --build nightly
+cargo horizon-mod fits mysticalagradditions.hmod --build 0a875da   # made for
+cargo horizon-mod fits mysticalagradditions.hmod --build 0b14f8a   # a different build: fits
 python3 tools/carry_content.py --check                # the carried content still matches the jar
 ```
 
@@ -42,14 +43,22 @@ BUILD_LOCAL=1 ../tools/build-slot.sh run --job mysticalagradditions-sdk \
 
 ## Rules that matter here
 
-- `src/runtime.rs` is **byte-identical** to the retired `mixins/…/runtime.rs`
-  (sha256 `00bb7243…c520`); never let `cargo fmt` rewrite it, and prove it with
-  `cmp` and with `unzip -p <id>.hmod src/runtime.rs | sha256sum` after a build.
+- `src/runtime.rs` was **byte-identical** to the retired `mixins/…/runtime.rs`
+  (sha256 `00bb7243…c520`) through 0.2.0; **0.2.1 added the mob-drop rules to
+  it**, so that hash is history. It is still the port's only rule file: no
+  `mod_api` types, all behaviour testable with `cargo test`. Prove the packaged
+  copy matches the tree with
+  `unzip -p <id>.hmod src/runtime.rs | sha256sum` after a build.
 - The game-side glue lives in `src/support.rs`; it holds no rule of its own.
 - `assets/` and `data/` are the package root now, written by
   `tools/carry_content.py` (the root `horizon-mod.toml` is the only manifest).
 - `Cargo.lock` and `.horizon/` are gitignored and never delivered.
 - Do not commit binaries, exported sources or Minecraft assets.
+- `launcher-game.sh` reuses a native build whose `horizon-mod.toml` is
+  byte-identical, so a code-only change under an unchanged manifest runs the old
+  binary (`--rebuild` is parsed but unused). Change the manifest (a comment or
+  the version) before an in-game run, and check the build says
+  `Compiling mysticalagradditions`.
 - Local-only until the licence review approves publishing (MIT, rank 0;
   ARCHITECTURE.md §8).
 

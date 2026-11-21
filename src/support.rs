@@ -9,10 +9,10 @@
 use std::sync::OnceLock;
 
 use mod_api::{
-    self, BlockKey, BlockPart, BlockPos, BlockState, Flow, Host, HostBlockStates,
-    IsBonemealSuccessEvent, IsValidBonemealTargetEvent, ItemKey, ItemStack, LevelHost,
-    LevelRandomHost, LevelSide, LevelWriteHost, LootDropsEvent, RandomTickEvent, Registrar,
-    ServerHost,
+    self, BlockKey, BlockPart, BlockPos, BlockState, EntityRef, Flow, GameRuleReadError,
+    GameRuleValue, Host, HostBlockStates, IsBonemealSuccessEvent, IsValidBonemealTargetEvent,
+    ItemDrop, ItemKey, ItemStack, LevelHost, LevelRandomHost, LevelSide, LevelWriteHost,
+    LivingDropsEvent, LootDropsEvent, RandomSource, RandomTickEvent, Registrar, ServerHost,
 };
 
 use crate::runtime::{self, Crop};
@@ -53,7 +53,13 @@ pub(super) fn register(r: &mut dyn Registrar) {
     for entry in entries {
         r.block_part(entry.block, CropPart);
     }
+    let withering_soul = r.item_key(runtime::WITHERING_SOUL);
+    let dragon_scale = r.item_key(runtime::DRAGON_SCALE);
     let _ = ENTRIES.set(entries);
+    let _ = MOB_KEYS.set(MobKeys {
+        withering_soul,
+        dragon_scale,
+    });
 }
 
 /// The table entry whose block is `state`, or `None` for a block that is not a tier-6 crop.
@@ -196,9 +202,132 @@ fn age_of_state(host: &dyn Host, state: BlockState) -> Option<u8> {
     state.property(&metadata, AGE).ok().flatten()?.parse().ok()
 }
 
+/// The `do_mob_loot` answer as [`runtime::MobLoot`]: only an explicit `false` turns the
+/// handler off, as `MobDropsHandler` returns only when the rule reads false.
+fn loot_from(rule: Result<GameRuleValue, GameRuleReadError>) -> runtime::MobLoot {
+    match rule {
+        Ok(GameRuleValue::Bool(false)) => runtime::MobLoot::Disabled,
+        _ => runtime::MobLoot::Enabled,
+    }
+}
+
+/// The server-wide `mob_drops` rule, as the game's own store names it. At this pin vanilla's
+/// `doMobLoot` rule is `minecraft:mob_drops` (`/gamerule mob_drops`); `do_mob_loot` is refused.
+const DO_MOB_LOOT: &str = "minecraft:mob_drops";
+
+/// The two items the drop handler adds, resolved once at registration.
+#[derive(Clone, Copy)]
+struct MobKeys {
+    withering_soul: ItemKey,
+    dragon_scale: ItemKey,
+}
+
+/// The Wither's and the Ender Dragon's drop items.
+static MOB_KEYS: OnceLock<MobKeys> = OnceLock::new();
+
+/// `MobDropsHandler.onLivingDrops` (8.0.15): a dying Wither leaves one `withering_soul` on
+/// its 35 % roll, and a dying Ender Dragon leaves eight `dragon_scale`; `do_mob_loot` off
+/// means no handler. The stacks join the entity's own collected drops, so nothing spawns
+/// before the game does.
+pub(super) fn on_living_drops(host: &mut dyn ServerHost, event: &mut LivingDropsEvent<'_>) {
+    let loot = loot_from(host.game_rule(DO_MOB_LOOT));
+    if loot == runtime::MobLoot::Disabled {
+        return;
+    }
+    let Some(keys) = MOB_KEYS.get() else {
+        return;
+    };
+    let Some(entity) = host.entity(event.entity) else {
+        return;
+    };
+    let drawn = runtime::mob_drops(event.kind, soul_roll(host, entity, event.kind), loot);
+    if drawn.withering_souls == 0 && drawn.dragon_scales == 0 {
+        return;
+    }
+    let Some(position) = entity.position(&*host) else {
+        return;
+    };
+    let velocity = drop_velocity(host, entity);
+    push_drop(
+        event.drops,
+        keys.withering_soul,
+        drawn.withering_souls,
+        position,
+        velocity,
+    );
+    push_drop(
+        event.drops,
+        keys.dragon_scale,
+        drawn.dragon_scales,
+        position,
+        velocity,
+    );
+}
+
+/// The `Math.random()` draw `MobDropsHandler` makes for the Wither, taken from the server
+/// level's own random so the port needs no global stream. No other kind's roll is read, so
+/// no other death moves that stream.
+fn soul_roll(host: &mut dyn ServerHost, entity: EntityRef, kind: &str) -> f64 {
+    if kind != runtime::WITHER {
+        return 1.0;
+    }
+    entity
+        .level(&*host)
+        .and_then(|level| level.with_random(host, |random| random.next_double()))
+        .unwrap_or(1.0)
+}
+
+/// The velocity vanilla's `new ItemEntity(level, x, y, z, stack)` gives a death drop:
+/// `(rand(0.2) - 0.1, 0.2, rand(0.2) - 0.1)` from the level's random.
+fn drop_velocity(host: &mut dyn ServerHost, entity: EntityRef) -> [f64; 3] {
+    let jitter = entity
+        .level(&*host)
+        .and_then(|level| {
+            level.with_random(host, |random| [random.next_double(), random.next_double()])
+        })
+        .unwrap_or([0.5, 0.5]);
+    [
+        jitter[0].mul_add(0.2, -0.1),
+        0.2,
+        jitter[1].mul_add(0.2, -0.1),
+    ]
+}
+
+/// Append `count` of `item` at `position`, with vanilla's ten-tick pickup delay.
+fn push_drop(
+    drops: &mut Vec<ItemDrop>,
+    item: ItemKey,
+    count: u32,
+    position: [f64; 3],
+    velocity: [f64; 3],
+) {
+    if count == 0 {
+        return;
+    }
+    if let Some(stack) = ItemStack::new(item, count) {
+        drops.push(ItemDrop::new(stack, position, velocity, 10));
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn only_an_explicit_false_do_mob_loot_turns_the_handler_off() {
+        assert_eq!(
+            loot_from(Ok(GameRuleValue::Bool(false))),
+            runtime::MobLoot::Disabled
+        );
+        assert_eq!(
+            loot_from(Ok(GameRuleValue::Bool(true))),
+            runtime::MobLoot::Enabled
+        );
+        assert_eq!(
+            loot_from(Err(GameRuleReadError::UnknownRule)),
+            runtime::MobLoot::Enabled
+        );
+    }
 
     #[test]
     fn the_age_is_read_from_a_tier_six_crop_state() {

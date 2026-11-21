@@ -1,11 +1,13 @@
-//! Mystical Agradditions for Horizon — slice 1: the six tier-6 crops.
+//! Mystical Agradditions for Horizon: the six tier-6 crops and the two mob drops.
 //!
 //! Upstream (see `FINDINGS.md`) is `MysticalCropBlock` from the parent Mystical Agriculture:
 //! a crop on the wheat template whose `canGrow` needs the crop's own crux two blocks below,
 //! whose bone meal never grows it, and whose `getDrops` returns the tier's essence and seeds.
-//! The rules — the six-crop table, the crux gate, the tier-6 harvest counts — live in
-//! [`runtime`], a plain module with no `mod_api` types, so `cargo test` exercises them without
-//! the game. [`support`] is the glue: one block Part and the loot hook.
+//! `MobDropsHandler` adds the Wither's `withering_soul` and the Ender Dragon's `dragon_scale`.
+//! The rules — the six-crop table, the crux gate, the tier-6 harvest counts, the two drop
+//! rolls — live in [`runtime`], a plain module with no `mod_api` types, so `cargo test`
+//! exercises them without the game. [`support`] is the glue: one block Part, the loot hook and
+//! the mob-drop hook.
 //!
 //! # Where the retired container's hooks went
 //!
@@ -23,13 +25,19 @@
 //! | `[[module]] runtime` | `pub mod runtime` |
 //! | `[[module]] state` (`support.rs`) | `mod support` |
 //!
+//! `MobDropsHandler.onLivingDrops` is the one moment this port did not reach before 0.2.1:
+//! it is [`Hooks::living_drops`], the entity's whole collected drop list, and it is where the
+//! Wither's 35 % soul and the dragon's eight scales join the drops.
+//!
 //! The carried content is declared by this same package, so `register` resolves the six
-//! crops' blocks and items by id and attaches the Part to each crop block; a missing id
-//! refuses the mod at load instead of failing silently at the first tick.
+//! crops' blocks and items, the two drop items, and attaches the Part to each crop block; a
+//! missing id refuses the mod at load instead of failing silently at the first tick.
 pub mod runtime;
 mod support;
 
-use mod_api::{self, Hooks, LootDropsEvent, Registrar, RegistrationContext, ServerHost};
+use mod_api::{
+    self, Flow, Hooks, LivingDropsEvent, LootDropsEvent, Registrar, RegistrationContext, ServerHost,
+};
 
 /// The mod has no settings: what it keeps is the content's own ids, resolved once.
 #[derive(Default)]
@@ -46,5 +54,12 @@ impl Hooks for Mod {
     /// content table's fallback.
     fn loot_drops(&self, host: &mut dyn ServerHost, event: &mut LootDropsEvent<'_>) {
         support::on_loot_drops(host, event);
+    }
+
+    /// A mob died: a Wither may leave a `withering_soul` and an Ender Dragon leaves
+    /// `dragon_scale`, the jar's `MobDropsHandler`. The drops are added, never cancelled.
+    fn living_drops(&self, host: &mut dyn ServerHost, event: &mut LivingDropsEvent<'_>) -> Flow {
+        support::on_living_drops(host, event);
+        Flow::Continue
     }
 }

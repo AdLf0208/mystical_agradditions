@@ -1,5 +1,58 @@
 # Validation — Mystical Agradditions
 
+## 0.2.1 — Slice 3, the Wither drop (2026-11-21, current)
+
+Pin Horizon `0a875da91dbb0fdcb7ba8c42c11341aa229af51a`, horizon-mixins
+`e59da9094f0c2fdda6c627fe9eff22dec6a906f0`, game 26.3, SDK in `.horizon/sdk/`.
+Every local step ran through `ports/tools/build-slot.sh` with `BUILD_LOCAL=1`
+and `CARGO_INCREMENTAL=0` (the runner is the slot guard for an SDK package); the
+in-game game was built by `ports/tools/launcher-game.sh build`.
+
+### The ladder
+
+| # | Step | Command | Result |
+|---|---|---|---|
+| 1 | runtime red | `cargo test --offline`, `mob_drops` = `todo!()` | **11 passed, 5 failed** — `not yet implemented` at `src/runtime.rs:188` (`v021-test-red-runtime.log`) |
+| 2 | glue red | the same, `loot_from` = `todo!()` | **16 passed, 1 failed** — `not yet implemented` at `src/support.rs:203` (`v021-test-red-glue.log`) |
+| 3 | green | `cargo test --offline` | **17 passed, 0 failed** (`v021-test.log`) |
+| 4 | clippy | `cargo clippy --all-targets --offline -- -D warnings` | exit 0, **0 warnings** (`v021-clippy.log`) |
+| 5 | fmt | `cargo fmt --check` (not `--all`) | clean (`v021-fmt.log`) |
+| 6 | build ×2 | `rm -f Cargo.lock && cargo horizon-mod build`, twice | exit 0 each; the two artifacts **`cmp`-identical** (`v021-build-1.log`, `v021-build-2.log`) |
+| 7 | artifact | `sha256sum`, `unzip -l` | **92,210 B**, `637258ae3f0844c849e4d182b9a24075f03e3a66edafc95a30906924820c7217`, **181 entries**, no `Cargo.lock` (`v021-sha256.txt`) |
+| 8 | check | `cargo horizon-mod check mysticalagradditions.hmod` | `mysticalagradditions 0.2.1 (native-mod, format native-1/0a875da…/e59da90…, for 26.3)`, exit 0 (`v021-check.log`) |
+| 9 | fits, the pin | `cargo horizon-mod fits … --build 0a875da` | `0a875da  made for`, exit 0 (`v021-fits-0a875da.log`) |
+| 10 | fits, another build | `cargo horizon-mod fits … --build 0b14f8a` | `0b14f8a  fits`, exit 0 (`v021-fits-0b14f8a.log`) |
+| 11 | in-game default | `build-slot.sh run --step e2e -- bash tools/e2e-all.sh` | **`PASS` + `EXIT:0`** (`e2e-default.log`) |
+| 12 | selftest (growth) | leg 2, `SELFTEST=1` | `FAIL: SELFTEST: the no-crux crop grew …` + **`EXIT:1`** (`e2e-selftest.log`) |
+| 13 | negative (young crop) | leg 3, `NEGATIVE=1` | `FAIL: the age-0 crop dropped 0 essence, expected 1` + **`EXIT:1`** (`e2e-negative.log`) |
+| 14 | drops selftest | leg 4, `DROPS_SELFTEST=1` | `FAIL: DROPS_SELFTEST: 30 withers left 9 souls …` + **`EXIT:1`** (`e2e-drops-selftest.log`) |
+| 15 | control (unmodified game) | leg 5, `GAME=$CONTROL_GAME` | `FAIL: setblock nether_star crux` + **`EXIT:1`** (`e2e-control.log`) |
+| 16 | log audit | `python3 ports/tools/check-e2e-logs.py mysticalagradditions-e2e --strict` | **logs=5 ok=5**, missing-exit 0, bad-exit 0 |
+
+### The in-game transcript (abridged; `../_shared/evidence/mysticalagradditions-e2e/e2e-default.log`)
+
+```
+withers summoned with mob_drops off: 5
+gamerule PASS: mob_drops off left no withering soul
+wither PASS: 9 withering souls from 30 kills (35% each)
+differential PASS: a zombie left neither drop
+dragon BLOCKED at this pin: one kill left 0 scales (living_drops is not dispatched for the dragon's death sequence)
+PASS: … 30 withers left 9 withering souls (none with mob_drops off, none from a zombie) and the dragon half stayed blocked …
+EXIT:0
+```
+
+### Bookkeeping
+
+- `src/runtime.rs` is no longer byte-identical to the retired file (0.2.1 adds
+  the drop rules); `v021-sha256.txt` records the package, and the in-package copy
+  is verified by `verify-sdk-package.py` against the tree.
+- `python3 ports/tools/verify-sdk-package.py mysticalagradditions` → 1/1 (below).
+- `check-skills.py --notes ports/mysticalagradditions --strict` → PASS.
+- The Ender-Dragon half is `blocked(living_drops-ender-dragon)`; the e2e asserts
+  the gap (0 scales) so it fails when the pin starts telling the hook.
+
+## 0.1.0 (historical)
+
 > **2026-11-12 (review repairs, PR #676).** The delivered bytes changed when the
 > MIT notices were stamped into the carried content and `tools/package.sh` began
 > running `tools/stamp_license.py` itself: content `.hmod` **73,306 B**

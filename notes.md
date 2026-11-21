@@ -13,15 +13,18 @@ clean-room rewrite. The exact ATM10 jar is
 SHA-1 `be6e652de107065342aa3f98945cc5b0b3fa000c`, kept as the licence evidence).
 Local-only until publishing is approved (ARCHITECTURE.md §8).
 
-**Format (2026-11-18):** this port is one flat SDK `.hmod` (`api = "0.2"`,
-version `0.2.0`). See [`## Migration to the SDK format`](#migration-to-the-sdk-format-020-2026-11-18)
+**Format (2026-11-18, 0.2.1 on 2026-11-21):** this port is one flat SDK `.hmod`
+(`api = "0.2"`, version `0.2.1`). See
+[`## Migration to the SDK format`](#migration-to-the-sdk-format-020-2026-11-18)
 for the file map, the retired-injection → typed-hook table and the traps.
-`src/runtime.rs` is **byte-identical** to the retired
+`src/runtime.rs` was **byte-identical** to the retired
 `mixins/mysticalagradditions/runtime.rs` (sha256
-`00bb7243bb0a00fb20558f83aba90200b47ffcbe9a25e08b73a9f862b81ec520`), including
-the file inside the package. The sections on the retired `.hnmod` container
-(Slice 2's embedding, the staging ladder) are kept as history; the SDK section
-says what replaced each part.
+`00bb7243bb0a00fb20558f83aba90200b47ffcbe9a25e08b73a9f862b81ec520`) through
+0.2.0; **0.2.1 adds the mob-drop rules to it**, so that hash is now history and
+the file's tests grew from 8 to 14 (the crate's total is 17 with the glue's
+three). The sections on the retired `.hnmod` container (Slice 2's embedding, the
+staging ladder) are kept as history; the SDK section says what replaced each
+part.
 
 ## Approach (from the pin's `docs/modpacks.md`)
 
@@ -40,6 +43,185 @@ says what replaced each part.
   jar), the lang and the 26.3 loot tables/recipes/tags are carried; the crux
   gate and the bone-meal answer are the agent port. Growth is the **parent's
   mechanism** (the wheat template's own random tick), not a second engine.
+
+## Slice 3 — the Wither drop (0.2.1, 2026-11-21)
+
+Chosen from this port's own gap list, quoted:
+
+> **Out (gaps, next slices):** … the Wither/Ender-Dragon drop handlers
+> (`withering_soul`/`dragon_scale` are carried as recipe items without an
+> acquisition path) …
+
+Why it is the highest-value family left that fits the tier: class **content**,
+tier **logic**, and this is the mod's one remaining server-event behaviour. The
+two items were already carried and two carried recipes name them
+(`nether_star_crux` uses `withering_soul`, `dragon_egg_seeds` and
+`dragon_egg_crux` use `dragon_scale`), so without the handler those recipes were
+dead in survival — a carried recipe with no acquisition path is exactly what the
+parity rule (2026-11-20) forbids. No block entity, menu, screen, entity or
+renderer is added.
+
+### The upstream behaviour (8.0.15, `handler/MobDropsHandler.java`)
+
+Read from `BlakeBr0/MysticalAgradditions` at `fe4e81dea20458aa1959f5cfa8ef8354d2955aaa`
+(`Release 8.0.15`; file `handler/MobDropsHandler.java`):
+
+- `onLivingDrops(LivingDropsEvent)` returns at once unless
+  `level.getGameRules().getBoolean(RULE_DOMOBLOOT)`.
+- `entity instanceof WitherBoss && Math.random() < witheringSoulChance` adds one
+  `withering_soul` (`config/ModConfigs.java`: `witheringSoulChance` default
+  **0.35**, 0..1).
+- `entity instanceof EnderDragon && dragonScalesAmount > 0` adds
+  `dragonScalesAmount` `dragon_scale` (`dragonScalesAmount` default **8**, 0..64).
+- Each is `new ItemEntity(level, x, y, z, stack)`: vanilla's own velocity
+  `(rand*0.2 - 0.1, 0.2, rand*0.2 - 0.1)` and ten-tick pickup delay.
+
+### The rules and the tests
+
+`src/runtime.rs` (new, after `harvest`):
+
+- `MobLoot::{Enabled, Disabled}` for the gamerule answer (a two-variant enum, not
+  a `bool` parameter), `MobDrops { withering_souls, dragon_scales }`,
+  `mob_drops(kind, roll, loot) -> MobDrops`, and the constants
+  `WITHERING_SOUL_CHANCE = 0.35`, `DRAGON_SCALES_AMOUNT = 8`, `WITHER`,
+  `ENDER_DRAGON`, `WITHERING_SOUL`, `DRAGON_SCALE`.
+- The roll is **strict**: `roll < 0.35` drops, `roll == 0.35` does not — the
+  `Math.random() < chance` boundary, tested at 0.0/0.1/0.3499 and
+  0.35/0.5/0.999.
+- Six new tests: the two roll boundaries, the dragon's fixed eight, another mob
+  (zombie, wither skeleton, player, armor stand) drops none of ours, `MobLoot::Disabled`
+  drops nothing for either, and the constants name the carried ids and the jar's
+  defaults.
+
+`src/support.rs` (new glue): `on_living_drops` reads `minecraft:mob_drops`,
+resolves the two `ItemKey`s once in `register`, resolves the entity and its
+position, draws the roll for the Wither only (the rule ignores it for every other
+kind, so no other death moves the level's stream), builds the two `ItemDrop`s
+with vanilla's velocity and pickup delay, and appends them to the entity's own
+drop list. `loot_from` maps the gamerule answer (only an explicit `false`
+disables; an unreadable rule leaves the handler on) and has its own test.
+
+### Red → green (verbatim)
+
+The runtime tests, written first against a `todo!()` body:
+
+```
+---- runtime::tests::a_wither_leaves_one_soul_under_the_configured_chance stdout ----
+thread 'runtime::tests::a_wither_leaves_one_soul_under_the_configured_chance' (2505373) panicked at src/runtime.rs:188:5:
+not yet implemented
+…
+test result: FAILED. 11 passed; 5 failed; 0 ignored; 0 measured; 0 filtered out
+```
+
+Then the glue's own test (the migration's trap 11: the glue must fail on its own
+before it is written):
+
+```
+---- support::tests::only_an_explicit_false_do_mob_loot_turns_the_handler_off stdout ----
+thread 'support::tests::only_an_explicit_false_do_mob_loot_turns_the_handler_off' (2598612) panicked at src/support.rs:203:5:
+not yet implemented
+test result: FAILED. 16 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out
+```
+
+Green: **17 passed; 0 failed** (`v021-test.log`); clippy `-D warnings` exit 0 with
+0 warnings (`v021-clippy.log`); `cargo fmt --check` clean (`v021-fmt.log`).
+
+### What the pin actually does (measured, not assumed)
+
+1. **`kind` is the namespaced entity id**: `minecraft:wither`, not `wither`.
+2. **The gamerule is `mob_drops` at this pin**, not `doMobLoot`'s
+   `do_mob_loot`: `/gamerule do_mob_loot false` answers *"Incorrect argument for
+   command"*, `/gamerule mob_drops` answers *"Game rule mob_drops is currently set
+   to true"*. The hook reads `minecraft:mob_drops`.
+3. **`living_drops` fires for a `/kill` death** (and the dying mob still resolves
+   through `host.entity`): 30 withers killed by the command left 9 souls — the
+   jar's 35 % — and a zombie killed the same way left neither drop.
+4. **The Ender Dragon's death never tells `living_drops`** at this pin. A probe
+   that pushed eight scales from the hook's **first line** (no host read, no
+   entity lookup, fresh build) left nothing for a dragon killed four blocks from
+   the player, over 400 ticks. `living_death`/`living_death_post` already say the
+   dragon "uses a separate death sequence and fires neither living death hook";
+   the drop hook behaves the same. The alternatives were checked and rejected:
+   `mob_killed` only hears player melee kills and cannot add to a drop list, and
+   `entity_leave_level` also fires on chunk unload and dimension change, so it
+   would duplicate scales.
+
+### In-game evidence (`../_shared/evidence/mysticalagradditions-e2e/`)
+
+`e2e-default.log` (`PASS` + `EXIT:0`) records, after the crop/recipe legs:
+
+```
+== the Wither leaves a soul on its 35% roll and the Ender Dragon eight scales ==
+withers summoned with mob_drops off: 5
+gamerule PASS: mob_drops off left no withering soul
+wither PASS: 9 withering souls from 30 kills (35% each)
+differential PASS: a zombie left neither drop
+dragon BLOCKED at this pin: one kill left 0 scales (living_drops is not dispatched for the dragon's death sequence)
+```
+
+The four fail-capable legs: `e2e-selftest.log` (`FAIL: SELFTEST: the no-crux crop
+grew …` + `EXIT:1`), `e2e-negative.log` (`FAIL: the age-0 crop dropped 0 essence,
+expected 1` + `EXIT:1`), `e2e-drops-selftest.log` (`FAIL: DROPS_SELFTEST: 30
+withers left 9 souls …` + `EXIT:1`) and `e2e-control.log` (the same scenario on
+the unmodified Nightly: `FAIL: setblock nether_star crux` + `EXIT:1`).
+`check-e2e-logs.py mysticalagradditions-e2e --strict` → **logs=5 ok=5**.
+
+The package's `uses.json` grows from 107 surface entries (4 hooks) to **152
+(5 hooks)**: `living_drops` plus its `entity`/`kind`/`drops` fields, the
+`GameRuleValue` read, `EntityRef::level`/`position`, `LevelRef::with_random`,
+`RandomSource::next_double`, `ItemDrop::new` and `ItemStack::new`.
+
+### Deviations and blocks this slice records
+
+- **The roll's stream.** Upstream draws `Math.random()`, a global stream the pin
+  does not expose; the port draws the server level's own `next_double()` for the
+  Wither only. Same 0..1 uniform and the same 35 % chance; the draw moves the
+  level's stream where upstream's did not.
+- **The config is not ported.** `witheringSoulChance` and `dragonScalesAmount`
+  are the jar's defaults as constants, as the port already does for
+  `requiresEffectiveFarmland`.
+- **The dragon half is `blocked(living_drops-ender-dragon)`**: `dragon_scale` is
+  still carried without an acquisition path, so `dragon_egg_seeds` and
+  `dragon_egg_crux` remain uncraftable in survival. The e2e asserts the gap (0
+  scales) so it fails the day the pin starts telling the hook, and then the drop
+  is ported and the assertion flips.
+- **A harness trap worth keeping:** `launcher-game.sh` reuses a native build
+  whose `horizon-mod.toml` is byte-identical, so a code-only change under an
+  unchanged manifest runs the **old** binary (`--rebuild` is parsed but not
+  used). This cost three probe runs: the game kept running a probe build and
+  reported 4 souls per wither. Bumping the manifest forced
+  `Compiling mysticalagradditions (1 of 1)`, and every later number is from that
+  build.
+
+### Coverage (parity rule, 2026-11-20)
+
+| Jar family | State | Evidence / reason |
+|---|---|---|
+| 6 tier-6 crop blocks (ages 0..7) | tested | `registry PASS`; `growth PASS` (crux 1/1, no-crux 0, wrong-crux 3) |
+| 6 seeds (items + planting) | tested | `seed planting PASS`: seeds place `*_crop[age=0]`, a stick places nothing |
+| 6 essences / tier-6 harvest counts | tested | `loot PASS`: age 7 → 1 essence + 1 seed, age 0 → 0 + 1 |
+| 6 crux blocks + the crux gate | tested | `registry PASS`; growth cells; `bone meal` spent only with a crux |
+| bone-meal refusal | tested | `crop with crux PASS` (age 0, meal spent), `crop without crux PASS` (meal kept) |
+| insanium farmland | tested | planting + `farmland PASS` (silk → itself; plain → dirt + 5 essence in 20) |
+| insanium essence | tested | `farmland PASS` drops + `insanium_farmland` recipe |
+| five carried recipes (`*_seeds`, `*_crux`, farmland) | tested | `recipe PASS`, each with a wrong-ingredient control left empty |
+| Wither drop: `withering_soul` | **tested** | `wither PASS` 9/30, `gamerule PASS` (0 with `mob_drops` off), zombie differential 0 |
+| Ender-Dragon drop: `dragon_scale` | **blocked(living_drops-ender-dragon)** | measured above; `e2e-default.log` asserts 0 |
+| 6 essence-coal items + 6 coal blocks | not ported | the item's whole point is its burn time (`EssenceCoalItem.getBurnTime`); the content API has no fuel/burn-time declaration, so they would be inert |
+| 6 essence apples | not ported | `EssenceAppleItem` effects + `essenceAppleDuration`; needs a consumable/effect component carry — next slice candidate |
+| 6 paxels | not ported | per-stack tool stats (`break_speed`) are still a pending hook (ARCHITECTURE §3) |
+| 4 seed/crux recipe families (botania/avaritia/draconicevolution/powah materials) | not ported | their materials live in unported mods |
+| nether/end ores + configured/placed features + biome modifiers | not ported | worldgen carry; the mod's `c:*` ore tags are carried but no ore block is |
+| 6 molten fluids + buckets | not ported | fluid registration + buckets; machines-tier work |
+| insanium ingot/gemstone/nugget/block chain, `insanium_essence` recipe | not ported | needs the parent's `supremium_essence`, `prosperity_ingot`/`gemstone` and the `mysticalagriculture:infusion_crystals` tag; the parent port carries only inferium essence and prosperity ingot |
+| essence→item recipes (`nether_star_shard`, `dragon_egg_chunk`, …) | not ported | use the parent's `*_essence` items by id and `cucumber` recipe types |
+| Tinkers' material/casting/melting data | not ported | Tinkers is not in the registry |
+| config (`fertilizableTier6Crops`, worldgen toggles, apple duration) | not ported | defaults baked as constants |
+| creative tab | not ported | no tab registration carried |
+| client tint (crop flower, farmland) | not ported | client half; would need a tint registration |
+| farmland `fallOn` (never turns to dirt) | not ported — **now expressible** | the pin's `fall_on` (collect, v1, `LandingWrite`) landed after the 0.1.0 slice recorded this gap; next slice |
+
+Skills: superpowers/using-superpowers,brainstorming,writing-plans,test-driven-development,systematic-debugging,verification-before-completion; BeautifulRust/rust-best-practices,rust-port
 
 ## Slice 1 — the six tier-6 crops
 
@@ -145,7 +327,7 @@ bone-meal refusal, the jar's `getDrops` counts (`loot_drops`); the carried
 26.3 loot tables for the crop and farmland; the seven recipes and the two tags
 they need; **one embedded `.hnmod`** carrying the content.
 
-**Out (gaps, next slices):** the four other seed/crux recipes (unported mods);
+**Out (gaps, next slices — Slice 3 above closes the Wither half):** the four other seed/crux recipes (unported mods);
 `insanium_essence`'s own recipe (needs supremium essence + the infusion-crystal
 tag); the insanium ingot/gemstone/nugget/block chain; the six essence-coal
 items + blocks; six apples; six paxels; the four nether/end ores, their
@@ -158,13 +340,14 @@ farmland `fallOn`; the 10% fertilized essence.
 
 ## Version
 
-**0.2.0** is the SDK-format version (this migration). The **0.1.0** rows below
-describe the retired `.hnmod` container, in which the content mod
-(`content/horizon-mod.toml`), the mixin plan
+**0.2.1** is the current package: 0.2.0's SDK-format migration plus Slice 3's
+Wither drop (`living_drops`) and the move to the 2026-11-20 nightly
+`0a875da9…`. The **0.1.0** rows below describe the retired `.hnmod` container,
+in which the content mod (`content/horizon-mod.toml`), the mixin plan
 (`mixins/mysticalagradditions/horizon-mixin.toml`), the crate and the generators
 all carried the port's own number rather than upstream `1.21.1-8.0.15`.
 Playbook §1.7 still applies in one manifest: the registry entry, the file and the
-release agree on `0.2.0`, and upstream's number stays only as provenance in
+release agree on `0.2.1`, and upstream's number stays only as provenance in
 comments, `FINDINGS.md` and the jar names.
 
 ## Migration to the SDK format (0.2.0, 2026-11-18)
@@ -362,11 +545,13 @@ under their Part), `Hooks::register`/`Hooks::loot_drops`, the two registrar call
   `horizon-ctl` transcripts in the evidence folder remain the behaviour's proof
   for a `runtime.rs` that did not change, and no `ported` status may be claimed
   from them alone.
-- Every slice-boundary gap listed above is **unchanged**: the four seed/crux
-  recipe families whose materials live in unported mods, `insanium_essence`'s own
-  recipe, the insanium ingot/gemstone/nugget/block chain, the essence-coal items,
-  the apples, the paxels, the nether/end ores and their worldgen, the six molten
-  fluids, the Tinkers' data, the Wither/Ender-Dragon drop handlers, the config,
+- Every slice-boundary gap listed above was **unchanged in 0.2.0**; 0.2.1
+  (Slice 3) closes the Wither half of the drop-handler gap and leaves the rest:
+  the four seed/crux recipe families whose materials live in unported mods,
+  `insanium_essence`'s own recipe, the insanium ingot/gemstone/nugget/block
+  chain, the essence-coal items, the apples, the paxels, the nether/end ores and
+  their worldgen, the six molten fluids, the Tinkers' data, the **Ender-Dragon
+  half** of the drop handlers (`blocked(living_drops-ender-dragon)`), the config,
   the creative tab, the client tint, the farmland `fallOn` and the 10% fertilized
   essence.
 - **One new recorded difference:** the Part answers the bonemeal questions for

@@ -140,6 +140,69 @@ pub fn harvest(age: u8) -> Harvest {
     }
 }
 
+/// `config/ModConfigs.java`'s `witheringSoulChance` (default 0.35): the chance a
+/// killed Wither leaves one `withering_soul` (`MobDropsHandler.onLivingDrops`).
+pub const WITHERING_SOUL_CHANCE: f64 = 0.35;
+
+/// `config/ModConfigs.java`'s `dragonScalesAmount` (default 8): the stack an Ender
+/// Dragon leaves (`MobDropsHandler.onLivingDrops`).
+pub const DRAGON_SCALES_AMOUNT: u32 = 8;
+
+/// `ModItems.WITHERING_SOUL`, the Wither's drop.
+pub const WITHERING_SOUL: &str = "mysticalagradditions:withering_soul";
+
+/// `ModItems.DRAGON_SCALE`, the Ender Dragon's drop.
+pub const DRAGON_SCALE: &str = "mysticalagradditions:dragon_scale";
+
+/// The Wither's entity id (`WitherBoss`), the only mob that rolls the soul.
+pub const WITHER: &str = "minecraft:wither";
+
+/// The Ender Dragon's entity id (`EnderDragon`), the only mob that leaves scales.
+pub const ENDER_DRAGON: &str = "minecraft:ender_dragon";
+
+/// The `do_mob_loot` gate `MobDropsHandler.onLivingDrops` returns on
+/// (`level.getGameRules().getBoolean(GameRules.RULE_DOMOBLOOT)`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MobLoot {
+    /// `do_mob_loot` is on: the handler runs.
+    Enabled,
+    /// `do_mob_loot` is off: the handler adds nothing.
+    Disabled,
+}
+
+/// The extra stacks `MobDropsHandler.onLivingDrops` appends to a dying mob's own
+/// drops.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct MobDrops {
+    /// `withering_soul` stacks: one on a successful roll, none otherwise.
+    pub withering_souls: u32,
+    /// `dragon_scale` stacks: [`DRAGON_SCALES_AMOUNT`] for the dragon, none otherwise.
+    pub dragon_scales: u32,
+}
+
+/// `MobDropsHandler.onLivingDrops` for a dying mob of `kind`, given the 0..1 `roll`
+/// the handler draws for the Wither (`Math.random() < witheringSoulChance`) and the
+/// `do_mob_loot` answer `loot`.
+///
+/// A Wither leaves one `withering_soul` when `roll` is under
+/// [`WITHERING_SOUL_CHANCE`]; an Ender Dragon leaves [`DRAGON_SCALES_AMOUNT`]
+/// `dragon_scale` with no roll at all; every other kind, and a disabled
+/// `do_mob_loot`, adds nothing.
+#[must_use]
+pub fn mob_drops(kind: &str, roll: f64, loot: MobLoot) -> MobDrops {
+    if loot == MobLoot::Disabled {
+        return MobDrops::default();
+    }
+    MobDrops {
+        withering_souls: u32::from(kind == WITHER && roll < WITHERING_SOUL_CHANCE),
+        dragon_scales: if kind == ENDER_DRAGON {
+            DRAGON_SCALES_AMOUNT
+        } else {
+            0
+        },
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -269,5 +332,85 @@ mod tests {
         assert!(can_grow(crop, crop.crux, FARMLAND, true));
         // The farmland gate never overrides a missing crux.
         assert!(!can_grow(crop, "minecraft:stone", FARMLAND, true));
+    }
+
+    #[test]
+    fn a_wither_leaves_one_soul_under_the_configured_chance() {
+        for roll in [0.0, 0.1, 0.3499] {
+            assert_eq!(
+                mob_drops(WITHER, roll, MobLoot::Enabled),
+                MobDrops {
+                    withering_souls: 1,
+                    dragon_scales: 0
+                },
+                "roll {roll}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_wither_leaves_nothing_at_or_above_the_configured_chance() {
+        // `Math.random() < chance` is strict, so a draw exactly at 0.35 is a miss.
+        for roll in [WITHERING_SOUL_CHANCE, 0.5, 0.999] {
+            assert_eq!(
+                mob_drops(WITHER, roll, MobLoot::Enabled),
+                MobDrops::default(),
+                "roll {roll}"
+            );
+        }
+    }
+
+    #[test]
+    fn an_ender_dragon_leaves_eight_scales_whatever_the_roll() {
+        for roll in [0.0, WITHERING_SOUL_CHANCE, 0.999] {
+            assert_eq!(
+                mob_drops(ENDER_DRAGON, roll, MobLoot::Enabled),
+                MobDrops {
+                    withering_souls: 0,
+                    dragon_scales: DRAGON_SCALES_AMOUNT
+                },
+                "roll {roll}"
+            );
+        }
+        assert_eq!(
+            DRAGON_SCALES_AMOUNT, 8,
+            "the jar's dragonScalesAmount default"
+        );
+    }
+
+    #[test]
+    fn another_mob_leaves_none_of_our_drops() {
+        for kind in [
+            "minecraft:zombie",
+            "minecraft:wither_skeleton",
+            "minecraft:player",
+            "minecraft:armor_stand",
+        ] {
+            assert_eq!(
+                mob_drops(kind, 0.0, MobLoot::Enabled),
+                MobDrops::default(),
+                "{kind} with a successful roll"
+            );
+        }
+    }
+
+    #[test]
+    fn do_mob_loot_off_adds_nothing_to_any_mob() {
+        for kind in [WITHER, ENDER_DRAGON] {
+            assert_eq!(
+                mob_drops(kind, 0.0, MobLoot::Disabled),
+                MobDrops::default(),
+                "{kind} with the gamerule off"
+            );
+        }
+    }
+
+    #[test]
+    fn the_drops_name_the_carried_items_and_the_jars_chance() {
+        assert_eq!(WITHERING_SOUL, "mysticalagradditions:withering_soul");
+        assert_eq!(DRAGON_SCALE, "mysticalagradditions:dragon_scale");
+        assert_eq!(WITHER, "minecraft:wither");
+        assert_eq!(ENDER_DRAGON, "minecraft:ender_dragon");
+        assert_eq!(WITHERING_SOUL_CHANCE, 0.35, "witheringSoulChance default");
     }
 }

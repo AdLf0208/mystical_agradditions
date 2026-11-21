@@ -30,7 +30,10 @@
 #   6. insanium farmland silk-touches itself and drops dirt + a 25% insanium
 #      essence otherwise;
 #   7. the recipes craft in a real table with empty wrong-ingredient controls;
-#   8. unknown ids are refused.
+#   8. the Wither leaves a withering soul on the jar's 35% roll (and none with
+#      `do_mob_loot` off, and none from a zombie), and an Ender Dragon leaves the
+#      jar's eight dragon scales (MobDropsHandler, the `living_drops` hook);
+#   9. unknown ids are refused.
 #
 # CONTROL_GAME=<an unmodified horizon-client>: first run this scenario's binding
 # checks against a game with no mod, where every id must be unknown — the
@@ -39,6 +42,8 @@
 # SELFTEST=1 keeps the scenario but asserts the no-crux crop grew: the run MUST
 # fail, proving the growth assertion is not vacuous.
 # NEGATIVE=1 asserts a young crop drops essence: it MUST fail too.
+# DROPS_SELFTEST=1 asserts the withers left no soul: it MUST fail, proving the
+# drop assertion is not vacuous.
 set -euo pipefail
 
 CLONE=/home/adlf/Desktop/all_the_mods_10_rust_rewrite
@@ -51,6 +56,7 @@ RES=${RES:-${HORIZON_RES:-/home/adlf/Desktop/horizon/.local/horizon-client/26.3}
 SOCK=${SOCK:-/tmp/opencode/mysticalagradditions-e2e.sock}
 NEGATIVE=${NEGATIVE:-0}
 SELFTEST=${SELFTEST:-0}
+DROPS_SELFTEST=${DROPS_SELFTEST:-0}
 MOD=mysticalagradditions
 WORLD=MysticalAgradditionsE2E
 
@@ -138,12 +144,15 @@ control_game_leg() {
     echo "== control: an unmodified horizon-client, where no id of this mod exists =="
     LAUNCH_GAME=$CONTROL_GAME launch MysticalAgradditionsControl
     ctl command "give @s $MOD:nether_star_seeds 1" >/dev/null 2>&1 || true
+    ctl command "give @s $MOD:withering_soul 1" >/dev/null 2>&1 || true
+    ctl command "give @s $MOD:dragon_scale 1" >/dev/null 2>&1 || true
     ctl command "execute in minecraft:the_end run setblock 43 121 7 $MOD:awakened_draconium_crop" >/dev/null 2>&1 || true
     ctl command "execute in minecraft:the_end run setblock 43 120 7 $MOD:insanium_farmland[moisture=7]" >/dev/null 2>&1 || true
     ctl wait 5 >/dev/null
-    ctl inventory | jq -e --arg i "$MOD:nether_star_seeds" \
-        '[.hotbar[], .main[] | select(.item == $i)] | length == 0' >/dev/null \
-        || fail "the control game has the seed item, so the content came from somewhere else"
+    ctl inventory | jq -e --arg a "$MOD:nether_star_seeds" --arg b "$MOD:withering_soul" \
+        --arg c "$MOD:dragon_scale" \
+        '[.hotbar[], .main[] | select(.item == $a or .item == $b or .item == $c)] | length == 0' >/dev/null \
+        || fail "the control game has a seed or drop item, so the content came from somewhere else"
     ctl setblock 43 121 7 "minecraft:air" >/dev/null 2>&1 || true
     ctl wait 3 >/dev/null
     local name
@@ -474,6 +483,92 @@ say "crafting: seeds + cruxes (shaped) and insanium farmland (shapeless)"
 ctl command "gamemode creative @s" >/dev/null
 python3 "$PORT/tools/craft_check.py" "$SOCK" "$CTL" 37 120 9 || fail "craft_check.py failed"
 
+# ---------------------------------------------------------------- mob drops
+say "the Wither leaves a soul on its 35% roll and the Ender Dragon eight scales"
+# An empty stone platform, with the player 4.5 blocks from the kill point so the
+# drops stay on the ground (a closer player picks them up). Peaceful removes
+# monsters the moment they spawn, so the leg runs at easy with NoAI withers.
+end "difficulty easy"
+end "gamerule mob_griefing false"
+end "fill 50 118 18 62 118 28 minecraft:stone"
+end "tp @s 56.5 119 27.5"
+ctl wait 20 >/dev/null
+items_of() {
+    ctl entities 12 item \
+        | jq -r --arg i "$1" '[.entities[] | select(.kind == "item" and .item.item == $i) | .item.count] | add // 0'
+}
+withers() { ctl entities 40 minecraft:wither | jq -r '.entities | length'; }
+summon_withers() { # count
+    local i
+    for i in $(seq 1 "$1"); do
+        end "summon minecraft:wither 56 122 23 {Invul:0,NoAI:1b,Silent:1b,PersistenceRequired:1b}" >/dev/null \
+            || fail "cannot summon a wither ($i)"
+    done
+    ctl wait 10 >/dev/null
+}
+souls0=$(items_of "$MOD:withering_soul")
+scales0=$(items_of "$MOD:dragon_scale")
+
+# The jar returns on `mob_drops` off, so no roll can save a soul.
+end "gamerule mob_drops false"
+summon_withers 5
+echo "withers summoned with mob_drops off: $(withers)"
+end "kill @e[type=minecraft:wither]"
+ctl wait 20 >/dev/null
+[ "$(withers)" = 0 ] || fail "$(withers) withers survived /kill with the rule off"
+off_souls=$(items_of "$MOD:withering_soul")
+[ "$off_souls" = "$souls0" ] || fail "mob_drops off still left $((off_souls - souls0)) withering souls"
+echo "gamerule PASS: mob_drops off left no withering soul"
+
+# The roll itself: `Math.random() < 0.35` over enough kills that a miss is ~0.65^30.
+end "gamerule mob_drops true"
+summon_withers 30
+n_withers=$(withers)
+[ "$n_withers" -ge 30 ] || fail "only $n_withers of 30 withers remain"
+end "kill @e[type=minecraft:wither]"
+ctl wait 40 >/dev/null
+[ "$(withers)" = 0 ] || fail "$(withers) withers survived /kill"
+souls=$(items_of "$MOD:withering_soul")
+gained=$((souls - souls0))
+[ "$gained" -ge 1 ] || fail "$n_withers withers left $gained withering souls"
+[ "$gained" -le "$n_withers" ] || fail "$n_withers withers left $gained souls, more than one each"
+echo "wither PASS: $gained withering souls from $n_withers kills (35% each)"
+if [ "$DROPS_SELFTEST" = 1 ]; then
+    fail "DROPS_SELFTEST: $n_withers withers left $gained souls (the assertion above must fail when inverted)"
+fi
+
+# A mob of another kind is a differential: same kill path, neither drop.
+end "summon minecraft:zombie 56 119 23 {PersistenceRequired:1b}" >/dev/null || fail "cannot summon a zombie"
+ctl wait 10 >/dev/null
+end "kill @e[type=minecraft:zombie]"
+ctl wait 20 >/dev/null
+[ "$(items_of "$MOD:withering_soul")" = "$souls" ] || fail "a zombie left a withering soul"
+[ "$(items_of "$MOD:dragon_scale")" = "$scales0" ] || fail "a zombie left a dragon scale"
+echo "differential PASS: a zombie left neither drop"
+
+# The dragon half is blocked at this pin: its separate death sequence never tells
+# `living_drops` (as `living_death`/`living_death_post` also say), so the kill must
+# leave no dragon scale. This assertion fails the day the pin starts telling it —
+# then the scale drop is ported and this becomes the positive assertion.
+end "kill @e[type=minecraft:ender_dragon]" >/dev/null 2>&1 || true
+ctl wait 20 >/dev/null
+end "summon minecraft:ender_dragon 56.5 126 23.5" >/dev/null || fail "cannot summon an ender dragon"
+ctl wait 10 >/dev/null
+end "kill @e[type=minecraft:ender_dragon,limit=1,sort=nearest]" >/dev/null || fail "cannot kill the dragon"
+dragon_gained=0
+for _ in $(seq 1 40); do
+    ctl wait 10 >/dev/null
+    scales=$(items_of "$MOD:dragon_scale")
+    dragon_gained=$((scales - scales0))
+    [ "$dragon_gained" -ne 0 ] && break
+done
+[ "$dragon_gained" = 0 ] \
+    || fail "the pin told living_drops for the dragon: port the 8-scale drop (saw $dragon_gained)"
+echo "dragon BLOCKED at this pin: one kill left $dragon_gained scales (living_drops is not dispatched for the dragon's death sequence)"
+end "gamerule mob_griefing true"
+end "gamerule mob_drops true"
+end "difficulty peaceful"
+
 # ---------------------------------------------------------------- controls
 say "unknown ids are refused"
 if ctl give "$MOD:not_an_item" 1 >/dev/null 2>&1; then
@@ -484,5 +579,5 @@ ctl setblock 60 121 12 "$MOD:not_a_block" >/dev/null 2>&1 || true
     || fail "$MOD:not_a_block became $(block_name 60 121 12)"
 echo "unknown ids refused"
 
-echo "PASS: 6 crops + 6 cruxes + insanium farmland bind; seeds place on insanium farmland and a stick does not; the crux crop grew $g/$d while the no-crux crop held $n and the wrong-crux crop held $w; the awakened-draconium line held at random_tick_speed 0, grew 0->$aw and dropped $aw_essence essence + $aw_seeds seeds; bone meal was spent and refused with a crux, kept without one, and grew vanilla wheat; a ripe crop dropped $ripe essence + $ripe_seeds seeds, a young one $young/$young_seeds; insanium farmland silk-touched itself and dropped $essence_total essence in 20 plain breaks; the recipes crafted with empty controls; unknown ids were refused$( [ -n "$CONTROL_GAME" ] && echo ' and the unmodified control knew none of them' || echo '' )"
+echo "PASS: 6 crops + 6 cruxes + insanium farmland bind; seeds place on insanium farmland and a stick does not; the crux crop grew $g/$d while the no-crux crop held $n and the wrong-crux crop held $w; the awakened-draconium line held at random_tick_speed 0, grew 0->$aw and dropped $aw_essence essence + $aw_seeds seeds; bone meal was spent and refused with a crux, kept without one, and grew vanilla wheat; a ripe crop dropped $ripe essence + $ripe_seeds seeds, a young one $young/$young_seeds; insanium farmland silk-touched itself and dropped $essence_total essence in 20 plain breaks; the recipes crafted with empty controls; $n_withers withers left $gained withering souls (none with mob_drops off, none from a zombie) and the dragon half stayed blocked ($dragon_gained scales: living_drops is not dispatched for its death); unknown ids were refused$( [ -n "$CONTROL_GAME" ] && echo ' and the unmodified control knew none of them' || echo '' )"
 exit 0
